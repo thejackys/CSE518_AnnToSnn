@@ -37,7 +37,6 @@ device = ("cuda" if torch.cuda.is_available()
 def train(dataloader, model, loss_func, optimizer, loss=[], ):
     size = len(dataloader.dataset)
     model.train()
-    #TODO: Plot the graph
     for batch, (X,y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
 
@@ -69,7 +68,6 @@ def test(dataloader, model, loss_func):
     metrics['accuracy'] = correct*100
     metrics['spikes'] = model.get_total_spikes()
     return metrics
-
 def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0):
     if model == 'SNN':
         model = SNN(timesteps=timepsteps, firing_scale=firing_scale).to(device)
@@ -80,6 +78,8 @@ def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0):
     for t in range(epochs):
         print(f"epoch:{t}\n")
         train(train_dataloader, model, loss_func, optimizer)
+        if t % 2 == 1:
+            model.apply_weight_constraints()
         metrics = test(test_dataloader, model, loss_func)
         wandb.log(metrics,step = t)
     return metrics
@@ -95,11 +95,16 @@ def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0):
 #     w.log(metrics, step=t)
 # print(metrics)
 
-for s in np.linspace(1,0,50,endpoint=False): #scale firing rate from [0.02,...,1]
-    run = wandb.init(reinit=True)
-    metrics = model_run(epochs=5, timepsteps=32, firing_scale=s)
-    run.finish()
+# for s in np.linspace(1,0,50,endpoint=False): #scale firing rate from [0.02,...,1]
+#     run = wandb.init(reinit=True)
+#     metrics = model_run(epochs=5, timepsteps=32, firing_scale=s)
+#     wandb.log({"firing_rate":s})
+#     run.finish()
     
+# wandb.init(reinit=True)
+
+wandb.init(mode="disabled")
+metrics = model_run(epochs=16, timepsteps=32, firing_scale=0.46)    
 #testing acc
 
 
