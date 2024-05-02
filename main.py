@@ -4,14 +4,14 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
-# import wandb
-from model import IF_neuron, NN, SNN
+import wandb
+from model import ANN, SNN
 
 train_data = datasets.MNIST(
     root = "data",
     train=True,
     download=True,
-    transform=ToTensor(),
+    transform=ToTensor(), #Note: it will be scaled to [0,1]
 )
 test_data = datasets.MNIST(
     root="data",
@@ -65,14 +65,33 @@ def test(dataloader, model, loss_func):
     test_loss /= n_batch
     correct /= size
     print(f"Test Error:\n Acc: {(100*correct):>0.2f}, Avg loss: {test_loss:>4f}. \n")
+    return correct*100
 
-model = SNN().to(device)
-loss_func = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-epochs = 5
-for t in range(epochs):
-    print(f"epoch:{t}\n")
-    # train(train_dataloader, model, loss_func, optimizer)
-    test(test_dataloader, model, loss_func)
+def model_run(model='SNN', epochs=5, timepsteps=100):
+    if model == 'SNN':
+        model = SNN(timesteps=timepsteps).to(device)
+    else:
+        model = ANN().to(device)
+    loss_func = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    for t in range(epochs):
+        print(f"epoch:{t}\n")
+        train(train_dataloader, model, loss_func, optimizer)
+        accuracy = test(test_dataloader, model, loss_func)
+    return accuracy
+
+metrics = dict()
+w = wandb.init()
+T = [1,2,4,8,16,32,64,128,256,512,1024,2048]
+for t in T:
+    metrics[t] = model_run(epochs=5, timepsteps=t)
+    w.log({"accuracy":metrics[t]}, step=t)
+print(metrics)
+wandb.init(name='ANN')
+model_run(model='SNN', epochs=20)
+
+
+
+
 
 
