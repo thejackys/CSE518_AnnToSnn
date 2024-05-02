@@ -13,20 +13,22 @@ def net_reinitialize(net:nn.Module):
             m.reinitialize()
     
 class PoissonEncoder(nn.Module):
-    def __init__(self, timesteps=100):
+    def __init__(self, timesteps=100, scale=1.0):
         super().__init__()
         self.timesteps = timesteps
-
+        self.total_spikes = 0
+        self.scale = scale
     def forward(self, x):
         # Convert input to firing rates
         firing_rates = x #the input is resized to [0,1] already
         batch_size, n_pixels = firing_rates.shape
-        T_firing_rates = firing_rates.unsqueeze(0).repeat(self.timesteps, 1, 1) #[T, B, Pixels]
+        T_firing_rates = self.scale*firing_rates.unsqueeze(0).repeat(self.timesteps, 1, 1) #[T, B, Pixels]
         # Generate Poisson spikes
         spikes = torch.where(torch.rand_like(T_firing_rates) < T_firing_rates, 1.0, 0.0)
-        
+        self.total_spikes+=spikes.sum()
         return spikes
-
+    def get_total_spikes(self):
+        return self.total_spikes
 class IF_neuron(nn.Module):
     '''
     Implementation of the one step Integrate and fire (IF) Neuron. 
@@ -81,11 +83,11 @@ class IF_neuron(nn.Module):
 
 
 class SNN(nn.Module):
-    def __init__(self, timesteps=100):
+    def __init__(self, timesteps=100, firing_scale=1.0):
         super().__init__()
         self.flatten = nn.Flatten()
         self.timesteps = timesteps
-        self.encoder = PoissonEncoder(timesteps=self.timesteps)
+        self.encoder = PoissonEncoder(timesteps=self.timesteps, scale=firing_scale)
         self.FCNN = nn.Sequential(
             nn.Linear(28*28, 100, bias=False),
             IF_neuron(),
@@ -106,6 +108,12 @@ class SNN(nn.Module):
         logits = logits
         
         return logits
+    def get_total_spikes(self):
+        return self.encoder.get_total_spikes()
+#Homeostasis
+
+#Add spikes
+
 
 class ANN(nn.Module):
     def __init__(self):
@@ -120,3 +128,4 @@ class ANN(nn.Module):
         x = self.flatten(x)
         logits = self.FCNN(x)
         return logits
+

@@ -6,7 +6,7 @@ from torchvision import datasets
 from torchvision.transforms import ToTensor
 import wandb
 from model import ANN, SNN
-
+import numpy as np
 train_data = datasets.MNIST(
     root = "data",
     train=True,
@@ -65,11 +65,14 @@ def test(dataloader, model, loss_func):
     test_loss /= n_batch
     correct /= size
     print(f"Test Error:\n Acc: {(100*correct):>0.2f}, Avg loss: {test_loss:>4f}. \n")
-    return correct*100
+    metrics = dict()
+    metrics['accuracy'] = correct*100
+    metrics['spikes'] = model.get_total_spikes()
+    return metrics
 
-def model_run(model='SNN', epochs=5, timepsteps=100):
+def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0):
     if model == 'SNN':
-        model = SNN(timesteps=timepsteps).to(device)
+        model = SNN(timesteps=timepsteps, firing_scale=firing_scale).to(device)
     else:
         model = ANN().to(device)
     loss_func = nn.CrossEntropyLoss()
@@ -77,18 +80,28 @@ def model_run(model='SNN', epochs=5, timepsteps=100):
     for t in range(epochs):
         print(f"epoch:{t}\n")
         train(train_dataloader, model, loss_func, optimizer)
-        accuracy = test(test_dataloader, model, loss_func)
-    return accuracy
+        metrics = test(test_dataloader, model, loss_func)
+        wandb.log(metrics,step = t)
+    return metrics
 
-metrics = dict()
-w = wandb.init()
-T = [1,2,4,8,16,32,64,128,256,512,1024,2048]
-for t in T:
-    metrics[t] = model_run(epochs=5, timepsteps=t)
-    w.log({"accuracy":metrics[t]}, step=t)
-print(metrics)
-wandb.init(name='ANN')
-model_run(model='SNN', epochs=20)
+#reference ANN
+# model_run(model='SNN', epochs=20)
+
+#testing T
+
+# T = [1,2,4,8,16,32,64,128,256,512,1024]
+# for t in T:
+#     metrics = model_run(epochs=5, timepsteps=t)
+#     w.log(metrics, step=t)
+# print(metrics)
+
+for s in np.linspace(1,0,50,endpoint=False): #scale firing rate from [0.02,...,1]
+    run = wandb.init(reinit=True)
+    metrics = model_run(epochs=5, timepsteps=32, firing_scale=s)
+    run.finish()
+    
+#testing acc
+
 
 
 
