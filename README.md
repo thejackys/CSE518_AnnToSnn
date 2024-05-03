@@ -1,9 +1,7 @@
-# CSE518_AnnToSnn
-neuromorphic design project for converting Ann to SNN.
 # EE 518 Neuromorphic Computing Spring 2024 Final Project
+neuromorphic software simulation project for converting Ann to SNN.
 
 This project implements a Spiking Neural Network (SNN) for digit classification on the MNIST dataset. It explores the conversion of an Artificial Neural Network (ANN) to an SNN, and analyzes the impact of various factors such as firing rates, timesteps, and hardware constraints on the performance and energy consumption of the SNN.
-
 
 Spike norm and surrogate gradient function are tested to see the difference in the IF_neuron. 
 ## Spike norm
@@ -20,9 +18,6 @@ Although I am still not sure about the bioplausability of it, I tested the surro
 
 - `main.py`: The main script that trains the ANN and SNN models, and runs experiments with different configurations.
 - `model.py`: Contains the implementation of the ANN and SNN models, including the Poisson encoder, IF neuron, and surrogate gradient.
-
-
-### Incorporating hardware constraint and finetuning
 
 ## Requirements
 
@@ -49,14 +44,32 @@ For each mode:
 
 ## Results
 
+| Model                               | Best Timesteps | Average Runtime (seconds) | Best Firing Rate | Accuracy Threshold |
+|-------------------------------------|----------------|---------------------------|------------------|-------------------|
+| vanilla                             | 32             | 72                        | 0.46             | > 85%             |
+| spike norm                          | 128            | 240                       | 0.76             | > 82%             |
+| surrogate function                  | 64             | 200                       | 0.24             | > 96%             |
+| spike norm + surrogate function     | 8              | 55                        | 0.38             | > 90%             |
+<!-- ### vanilla
+best timesteps = 32, average runtinme:72 seconds, best firing rate = 0.46 to maintain accuracy > 85%
+### spike norm
+best timesteps = 128, average runtime = 240 seconds, best firing rate = 0.76 to maintain accuracy > 82%
 
-# Implementation detail
-## Neuron_class
+### surrogate function
+best timesteps = 64, average runtinme = 200 seconds, best firing rate = 0.24 to maintain accuracy > 96%
+
+### spkike norm + surrogate function
+best timesteps = 8, average runtinme = 55 seconds, best firing rate = 0.38 to maintain accuracy > 90% -->
+
+
+
+## Implementation detail
+### Neuron_class
 The `IF_neuron` class represents an implementation of the Integrate-and-Fire (IF) neuron model, which is a simple spiking neuron model used in Spiking Neural Networks (SNNs). Here's an explanation of the key components and functionality of the `IF_neuron` class:
 
 The `Surrogate_IF_neuron` replaces the firing method to the surrogate gradient function from spikingjelly.
 
-### Initialization
+#### Initialization
 
 - The `IF_neuron` class is initialized with two optional parameters:
  - `v_threshold`: The threshold voltage for firing (default: 1).
@@ -64,7 +77,7 @@ The `Surrogate_IF_neuron` replaces the firing method to the surrogate gradient f
 - The neuron's membrane potential `self.v` is initially set to the reset voltage `v_reset`.
 - The `self.v_threshold_norm` is set to negative infinity, which is used for spike normalization.
 
-### Forward Pass
+#### Forward Pass
 
 - The `forward` method takes an input tensor and updates the neuron's state accordingly.
 - If `self.v` is a float (indicating it hasn't been initialized yet), it is converted to a tensor with the same shape as the input and initialized with the reset voltage.
@@ -74,23 +87,37 @@ The `Surrogate_IF_neuron` replaces the firing method to the surrogate gradient f
 - The maximum value of the input is used to update `self.v_threshold_norm` for spike normalization.
 - The method returns the spike output tensor.
 
-### Firing Mechanism
+#### Firing Mechanism
 
 - The `fire` method computes the difference between the membrane potential `self.v` and the threshold voltage `self.v_threshold`.
 - It returns a tensor where values greater than 0 are set to 1.0 (indicating a spike) and values less than or equal to 0 are set to 0.0 (indicating no spike).
 
-### Reset Mechanism
+#### Reset Mechanism
 
 - The `reset` method is called when the neuron fires.
 - It subtracts the threshold voltage multiplied by the spike tensor from the membrane potential `self.v`, effectively resetting the membrane potential for the spiked neurons.
 
-### Reinitialization and Spike Normalization
+#### Reinitialization and Spike Normalization
 
 - The `reinitialize` method sets the membrane potential `self.v` back to the reset voltage `v_reset`, allowing the neuron to be reused for multiple samples.
 - The `spike_normalize` method sets the threshold voltage `self.v_threshold` to the value of `self.v_threshold_norm`, which is used for spike normalization.
 
 ## Hardware constraints
-###
+The Hardware constraints are applied between training and test process:
+``` python
+train(train_dataloader, model, loss_func, optimizer)
+if add_constraint:
+    model.apply_weight_constraints()
+test(test_dataloader, model, loss_func)
+```
+To optimize after applying the constraint weight. I use the similar procedure in [Deep Compression]([2]). 
+Retrain and apply the constraints recurrsively until a fixed epoch or an desired accuracy is achieved.  
+### Resistance ON-Off ratio
+
+### Discrete states
+The function `quantize_weight` mimics the discrete state nature in the hardware by setting the positive and negative weights to each have 16 states of weight.    
+
+
 
 ## Acknowledgements
 
@@ -100,3 +127,4 @@ The `Surrogate_IF_neuron` replaces the firing method to the surrogate gradient f
 
 
 [1]: https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2019.00095/full
+[2]: https://arxiv.org/abs/1510.00149
