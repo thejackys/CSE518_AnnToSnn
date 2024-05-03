@@ -68,9 +68,11 @@ def test(dataloader, model, loss_func):
     metrics['accuracy'] = correct*100
     metrics['spikes'] = model.get_total_spikes()
     return metrics
-def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0):
+def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0, add_constraint=True, do_spike_norm=True):
     if model == 'SNN':
-        model = SNN(timesteps=timepsteps, firing_scale=firing_scale).to(device)
+        model = SNN(timesteps=timepsteps, 
+                    firing_scale=firing_scale, 
+                    do_spike_norm=do_spike_norm).to(device)
     else:
         model = ANN().to(device)
     loss_func = nn.CrossEntropyLoss()
@@ -78,7 +80,7 @@ def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0):
     for t in range(epochs):
         print(f"epoch:{t}\n")
         train(train_dataloader, model, loss_func, optimizer)
-        if t % 2 == 1:
+        if t % 2 == 1 and add_constraint:
             model.apply_weight_constraints()
         metrics = test(test_dataloader, model, loss_func)
         wandb.log(metrics,step = t)
@@ -104,7 +106,7 @@ def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0):
 # wandb.init(reinit=True)
 
 wandb.init(mode="disabled")
-metrics = model_run(epochs=16, timepsteps=32, firing_scale=0.46)    
+metrics = model_run(epochs=5, timepsteps=32, firing_scale=0.46, add_constraint=False, do_spike_norm=False)    
 #testing acc
 
 

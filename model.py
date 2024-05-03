@@ -12,7 +12,20 @@ def net_reinitialize(net:nn.Module):
             #reinitialize the memristor value
             m.reinitialize()
 
-def quantize_weights(weights, num_bits):
+def quantize_weights(weights:torch.tensor, num_bits:int =4):
+    '''
+        Implementation of the weight clustering. It will cluster the weights into 32 bins: 16 bins for each positive and negative values. The weights is not necessarly an integer. 
+        
+        :param weights: weights to be shared 
+        :type timesteps: torch.tensor
+
+        :param num_bits: decide the numbers of shared weights. 2 ^ num_bits
+        :type num_bits: int
+
+        :return weights: clusterd weight values
+        :type return: torch.tensor
+        
+    '''
     num_levels = 2 ** num_bits
     
     # Quantize positive weights
@@ -43,8 +56,18 @@ def quantize_weights(weights, num_bits):
     return quantized_weights.detach()
 
 class PoissonEncoder(nn.Module):
+    '''
+        Implementation of the Poisson encoder that generates poisson spike
+        Input of the poissonEncoder should be in the range or [0,1], where input a in [0,1] will have 100*a% of firing a spike.
 
-    def __init__(self, timesteps=100, scale=1.0):
+        :param timesteps: numbers of timesteps that will be generated for a single input 
+        :type timesteps: int
+
+        :param scale: reset value whe n the neuron fires
+        :type scale: float
+        
+    '''
+    def __init__(self, timesteps:int = 100, scale:float = 1.0):
         super().__init__()
         self.timesteps = timesteps
         self.total_spikes = 0
@@ -60,6 +83,7 @@ class PoissonEncoder(nn.Module):
         return spikes
     def get_total_spikes(self):
         return self.total_spikes
+
 class IF_neuron(nn.Module):
     '''
     Implementation of the one step Integrate and fire (IF) Neuron. 
@@ -76,8 +100,11 @@ class IF_neuron(nn.Module):
         super().__init__()
         self.v = v_reset
         self.v_threshold = v_threshold
+        self.v_threshold_norm = -float("Inf") # spike norm
         self.v_reset = v_reset
-
+    
+    def get_total_spikes(self):
+        return self.encoder.get_total_spikes()
     def fire(self, input):
         """compute each value to see if the spike reset or not"""
         diff = self.v - self.v_threshold 
@@ -88,11 +115,14 @@ class IF_neuron(nn.Module):
         reset it to v_reset given the 
         """
         self.v = self.v - spike*self.v_threshold
+        
     def reinitialize(self):
         """
         Reinitialized the memristor value back to the intial state
         """
         self.v = self.v_reset
+    def spike_normalize(self):
+        self.v_threshold = self.v_threshold_norm
     def forward(self, input: Tensor) -> Tensor:
         #init the self.v 
         if isinstance(self.v, float): 
@@ -105,7 +135,7 @@ class IF_neuron(nn.Module):
         spike = self.fire(input)
         #reset if spike>threshold
         self.reset(spike)
-        
+        self.v_threshold_norm = max(self.v_threshold_norm, input.max()) # input= A batch of synapes_input *synapes_weight
         return spike
 
     def extra_repr(self):
@@ -113,7 +143,7 @@ class IF_neuron(nn.Module):
 
 
 class SNN(nn.Module):
-    def __init__(self, timesteps=32, firing_scale=1.0):
+    def __init__(self, timesteps=32, firing_scale=1.0, do_spike_norm=True):
         super().__init__()
         self.flatten = nn.Flatten()
         self.timesteps = timesteps
@@ -123,6 +153,7 @@ class SNN(nn.Module):
             IF_neuron(),
             nn.Linear(100, 10, bias=False)
         )
+        self.do_spike_norm = do_spike_norm
         
         # self.layer1 = nn.Linear(28*28, 100, bias=False)
         # self.IF = IF_neuron()
@@ -150,11 +181,11 @@ class SNN(nn.Module):
         logits =  torch.zeros(x.shape[1],10).to(x)
         for t in range(self.timesteps):
             logits += self.FCNN(x[t,:])
+        if self.do_spike_norm:
+            self.FCNN[1].spike_normalize()
         logits = logits
         
         return logits
-    def get_total_spikes(self):
-        return self.encoder.get_total_spikes()
 #Homeostasis
 
 #Add spikes
