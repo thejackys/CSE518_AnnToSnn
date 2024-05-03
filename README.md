@@ -110,12 +110,12 @@ if add_constraint:
     model.apply_weight_constraints()
 test(test_dataloader, model, loss_func)
 ```
-To optimize after applying the constraint weight. I use the similar procedure in [Deep Compression]([2]). 
-Retrain and apply the constraints recurrsively until a fixed epoch or an desired accuracy is achieved.  
+I use a similar procedure in [Deep Compression]([2]) to optimize after applying the constraint weight. 
+Retrain and apply the constraints recursively until a fixed epoch or a desired accuracy is achieved.  
 ### Resistance ON-Off ratio
 
 ### Discrete states
-The function `quantize_weight` mimics the discrete state nature in the hardware by setting the positive and negative weights to each have 16 states of weight.    
+The function `quantize_weight` mimics the hardware's discrete state nature by setting the positive and negative weights to each have 16 states of weight.    
 
 
 
