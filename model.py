@@ -1,6 +1,7 @@
 
-import spikingjelly.activation_based
-import spikingjelly.activation_based.neuron
+
+from spikingjelly.activation_based import surrogate
+from typing import Callable
 import torch.nn as nn
 from torch import Tensor
 import torch
@@ -11,6 +12,12 @@ def net_reinitialize(net:nn.Module):
         if hasattr(m, 'reinitialize'):
             #reinitialize the memristor value
             m.reinitialize()
+def net_spike_normalize(net:nn.Module):
+    for m in net.modules():
+        if hasattr(m, 'spike_normalize'):
+            #reinitialize the memristor value
+            m.spike_normalize()
+
 
 def quantize_weights(weights:torch.tensor, num_bits:int =4):
     '''
@@ -74,7 +81,7 @@ class PoissonEncoder(nn.Module):
         self.scale = scale
     def forward(self, x):
         # Convert input to firing rates
-        firing_rates = x #the input is resized to [0,1] already
+        firing_rates = x #the input is resized to [0,1] 
         batch_size, n_pixels = firing_rates.shape
         T_firing_rates = self.scale*firing_rates.unsqueeze(0).repeat(self.timesteps, 1, 1) #[T, B, Pixels]
         # Generate Poisson spikes
@@ -96,16 +103,14 @@ class IF_neuron(nn.Module):
     
     '''
     #When is the neuron reset?
-    def __init__(self, v_threshold:float = 1, v_reset:float = 0):
+    def __init__(self, v_threshold:float = 1, v_reset:float = 0, do_spike_norm=0):
         super().__init__()
         self.v = v_reset
         self.v_threshold = v_threshold
         self.v_threshold_norm = -float("Inf") # spike norm
         self.v_reset = v_reset
     
-    def get_total_spikes(self):
-        return self.encoder.get_total_spikes()
-    def fire(self, input):
+    def fire(self):
         """compute each value to see if the spike reset or not"""
         diff = self.v - self.v_threshold 
         return torch.where(diff> 0, 1.0, 0.0)
@@ -122,7 +127,7 @@ class IF_neuron(nn.Module):
         """
         self.v = self.v_reset
     def spike_normalize(self):
-        self.v_threshold = self.v_threshold_norm
+        self.v_threshold = self.v_threshold_norm.detach()
     def forward(self, input: Tensor) -> Tensor:
         #init the self.v 
         if isinstance(self.v, float): 
@@ -132,7 +137,7 @@ class IF_neuron(nn.Module):
         #charge
         self.v = self.v + input
         #spike
-        spike = self.fire(input)
+        spike = self.fire()
         #reset if spike>threshold
         self.reset(spike)
         self.v_threshold_norm = max(self.v_threshold_norm, input.max()) # input= A batch of synapes_input *synapes_weight
@@ -140,40 +145,57 @@ class IF_neuron(nn.Module):
 
     def extra_repr(self):
         return f'v_threshold={self.v_threshold}, v_reset={self.v_reset}'
-
+class Surrogate_IF_neuron(IF_neuron):
+    """
+    Adding surrogate function for backward training
+    """
+    def __init__(self, v_threshold:float = 1.0, v_reset:float = 0, surrogate_function: Callable = surrogate.Sigmoid()):
+        super().__init__(v_threshold= 1, v_reset = 0)
+        self.surrogate_function = surrogate_function
+    def fire(self):
+        return self.surrogate_function(self.v - self.v_threshold)
 
 class SNN(nn.Module):
-    def __init__(self, timesteps=32, firing_scale=1.0, do_spike_norm=True):
+    def __init__(self, timesteps=32, firing_scale=1.0, do_spike_norm=False, do_surrogate=False):
         super().__init__()
         self.flatten = nn.Flatten()
         self.timesteps = timesteps
         self.encoder = PoissonEncoder(timesteps=self.timesteps, scale=firing_scale)
-        self.FCNN = nn.Sequential(
-            nn.Linear(28*28, 100, bias=False),
-            IF_neuron(),
-            nn.Linear(100, 10, bias=False)
-        )
+        if do_surrogate:
+            self.FCNN = nn.Sequential(
+                nn.Linear(28*28, 100, bias=False),
+                Surrogate_IF_neuron(),
+                nn.Linear(100, 10, bias=False)
+            )
+        else:
+            self.FCNN = nn.Sequential(
+                nn.Linear(28*28, 100, bias=False),
+                IF_neuron(),
+                nn.Linear(100, 10, bias=False)
+            )
         self.do_spike_norm = do_spike_norm
         
         # self.layer1 = nn.Linear(28*28, 100, bias=False)
         # self.IF = IF_neuron()
         # self.layer2 =nn.Linear(100, 10, bias=False)
+    def get_total_spikes(self):
+        return self.encoder.get_total_spikes()
     def apply_weight_constraints(self):
         #apply weight constraints to 
-        self.FCNN[0].weight.data = quantize_weights(self.FCNN[0].weight.data, num_bits=4)
 
         on_off_ratio = 10
         max_val = self.FCNN[0].weight.data.abs().max()
         min_val = max_val / on_off_ratio
-        
+        print(f"weight befor quantizing, max:{max_val}, min:{min_val}")
         # Clip weights based on ON-OFF ratio
         self.FCNN[0].weight.data[self.FCNN[0].weight.data > 0] = self.FCNN[0].weight.data[self.FCNN[0].weight.data > 0].clamp(min=min_val, max=max_val)
 
-        self.FCNN[0].weight.data[self.FCNN[0].weight.data < 0] = self.FCNN[0].weight.data[self.FCNN[0].weight.data < 0].clamp(min=min_val, max=max_val)
+        self.FCNN[0].weight.data[self.FCNN[0].weight.data < 0] = self.FCNN[0].weight.data[self.FCNN[0].weight.data < 0].clamp(min=-max_val, max=-min_val) #clamp to [-max, -min]
         
         self.FCNN[0].weight.data = quantize_weights(self.FCNN[0].weight.data, num_bits=4)
-    
+
     def forward(self, x):
+        
         net_reinitialize(self) #reinitialize the IF-neuron valt
         x = self.flatten(x)
         x = self.encoder(x)
@@ -182,8 +204,9 @@ class SNN(nn.Module):
         for t in range(self.timesteps):
             logits += self.FCNN(x[t,:])
         if self.do_spike_norm:
-            self.FCNN[1].spike_normalize()
-        logits = logits
+            net_spike_normalize(self)
+        
+        logits = logits/self.timesteps
         
         return logits
 #Homeostasis
@@ -200,6 +223,7 @@ class ANN(nn.Module):
             nn.ReLU(),
             nn.Linear(100, 10, bias=False),
         )
+    
     def forward(self, x):
         x = self.flatten(x)
         logits = self.FCNN(x)

@@ -66,13 +66,18 @@ def test(dataloader, model, loss_func):
     print(f"Test Error:\n Acc: {(100*correct):>0.2f}, Avg loss: {test_loss:>4f}. \n")
     metrics = dict()
     metrics['accuracy'] = correct*100
-    metrics['spikes'] = model.get_total_spikes()
+    if isinstance(model, SNN):
+        metrics['spikes'] = model.get_total_spikes()
     return metrics
-def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0, add_constraint=True, do_spike_norm=True):
+def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0,
+            add_constraint=False,
+            do_spike_norm=False,
+            do_surrogate=False):
     if model == 'SNN':
         model = SNN(timesteps=timepsteps, 
                     firing_scale=firing_scale, 
-                    do_spike_norm=do_spike_norm).to(device)
+                    do_spike_norm=do_spike_norm,
+                    do_surrogate=do_surrogate).to(device)
     else:
         model = ANN().to(device)
     loss_func = nn.CrossEntropyLoss()
@@ -80,35 +85,76 @@ def model_run(model='SNN', epochs=5, timepsteps=32, firing_scale = 1.0, add_cons
     for t in range(epochs):
         print(f"epoch:{t}\n")
         train(train_dataloader, model, loss_func, optimizer)
-        if t % 2 == 1 and add_constraint:
+        if add_constraint:
             model.apply_weight_constraints()
         metrics = test(test_dataloader, model, loss_func)
         wandb.log(metrics,step = t)
     return metrics
 
-#reference ANN
-# model_run(model='SNN', epochs=20)
-
-#testing T
-
-# T = [1,2,4,8,16,32,64,128,256,512,1024]
-# for t in T:
-#     metrics = model_run(epochs=5, timepsteps=t)
-#     w.log(metrics, step=t)
-# print(metrics)
-
-# for s in np.linspace(1,0,50,endpoint=False): #scale firing rate from [0.02,...,1]
-#     run = wandb.init(reinit=True)
-#     metrics = model_run(epochs=5, timepsteps=32, firing_scale=s)
-#     wandb.log({"firing_rate":s})
-#     run.finish()
+def experiment(do_spike_norm, do_surrogate):
     
-# wandb.init(reinit=True)
+    # find best T for firing_rate=1
 
-wandb.init(mode="disabled")
-metrics = model_run(epochs=5, timepsteps=32, firing_scale=0.46, add_constraint=False, do_spike_norm=False)    
-#testing acc
+    T = [1,2,4,8,16,32,64,128,256,512]
+    best_acc = 0
+    best_T = 0
+    for t in T:  
+        run = wandb.init(reinit=True)
+        metrics = model_run(epochs=5, timepsteps=t,
+                            add_constraint=False,
+                            do_spike_norm=do_spike_norm,
+                            do_surrogate=do_surrogate)
+        if metrics['accuracy'] > best_acc:
+            best_T = t
+            best_acc = metrics['accuracy']
 
+        run.log({"timesteps":t})
+        run.finish()
+    print(f"best metrics found in timesteps = {best_T}, with acc = {best_acc}.")
+
+    #for best T, find best firing_rate s
+
+    for s in np.linspace(1,0,50,endpoint=False): #scale firing rate from [0.02,...,1]
+        run = wandb.init(reinit=True)
+        metrics = model_run(epochs=5, timepsteps=best_T, firing_scale=s,
+                            add_constraint=False,
+                            do_spike_norm=do_spike_norm,
+                            do_surrogate=do_surrogate)
+        run.log({"firing_rate":s})
+        run.finish()
+
+
+#reference ANN
+run = wandb.init(reinit=True)
+model_run(model='ANN', epochs=5)
+run.finish()
+
+#################
+########no spiking norm
+###################
+
+experiment(do_spike_norm=False, do_surrogate=False)
+
+#################
+########spiking norm
+###################
+experiment(do_spike_norm=True, do_surrogate=False)
+
+
+#################
+########no spiking norm w/surrogate
+###################
+experiment(do_spike_norm=False, do_surrogate=True)
+
+#################
+########spiking norm w/surrogate
+###################
+experiment(do_spike_norm=True, do_surrogate=True)
+
+
+
+# metrics = model_run(epochs=16, timepsteps=best_T, firing_scale=?, add_constraint=True, do_spike_norm=True)    
+# metrics = model_run(epochs=16, timepsteps=best_T, firing_scale=?, add_constraint=True, do_spike_norm=True)
 
 
 
