@@ -8,10 +8,10 @@ Spike norm and surrogate gradient function are tested to see the difference in t
 Spike norm is Adapted from spike-norm proposed from <cite>[Going Deeper in Spiking Neural Networks: VGG and Residual Architectures][1]</cite>. The new threshold voltage for each Spiking neuron layer is set to $$v_{th} = \text{max}(v_{th}, w_0^\intercal s_0, (w_1^\intercal s_1), ..., (w_B^\intercal s_B)) $$ where $B$ is the batch size, $s_i$ is the input from the previous layer, and $w_i$ is the weight respective to $s_i$  after a whole timesteps T is has passed. In the original paper, It's effectively updated with batch size of 1.
 
 ## Surrogate gradient function
-Neuron firing of the IF-neuron follows the heaviside function $$ S[t] \Theta(v_{mem}[t] - v_{th})$$
+Neuron firing of the IF-neuron follows the heaviside function $$ S[t] \Theta(v_{mem}[t] - v_{th}) $$
 The gradient would thus be unstable if follow the autograd directly. Thus (Surrogate Gradient Learning in Spiking Neural Networks)[https://arxiv.org/abs/1901.09948] is proposed to use surrogate function when doing backpropagation.  
 
-Although I am still not sure about the bioplausability of it, I tested the surrogate by applying the sigmoid surrogate gradient function from [spikinjelly](https://spikingjelly.readthedocs.io/zh-cn/latest/activation_based_en/surrogate.html)
+Although I am still not sure about the bioplausability of it, I tested the surrogate by applying the sigmoid surrogate gradient function from [spikingjelly](https://spikingjelly.readthedocs.io/zh-cn/latest/activation_based_en/surrogate.html)
 
 
 ## Project Structure
@@ -43,23 +43,56 @@ For each mode:
 2.  By deciding the optimal value of timesteps and firingrate, further, Incorporating hardware constraints such as resistance ON-OFF ratio of 10 and 16 discrete resistance states into the SNN model.
 
 ## Results
-
+Best Timesteps and best firing rate based on its best timesteps are reported in the following table:
 | Model                               | Best Timesteps | Average Runtime (seconds) | Best Firing Rate | Accuracy Threshold |
 |-------------------------------------|----------------|---------------------------|------------------|-------------------|
 | vanilla                             | 32             | 72                        | 0.46             | > 85%             |
 | spike norm                          | 128            | 240                       | 0.76             | > 82%             |
 | surrogate function                  | 64             | 200                       | 0.24             | > 96%             |
 | spike norm + surrogate function     | 8              | 55                        | 0.38             | > 90%             |
-<!-- ### vanilla
-best timesteps = 32, average runtinme:72 seconds, best firing rate = 0.46 to maintain accuracy > 85%
-### spike norm
-best timesteps = 128, average runtime = 240 seconds, best firing rate = 0.76 to maintain accuracy > 82%
+### 1b. Converting ANN to SNN
 
-### surrogate function
-best timesteps = 64, average runtinme = 200 seconds, best firing rate = 0.24 to maintain accuracy > 96%
+The ANN was converted to an SNN by simulating over multiple timesteps, replacing ReLUs with IF neurons, and converting input images to Poisson spike trains. The best timesteps are reported in the above graph. All these 4 graphs are generated with a maximum firing rate of 100%.
 
-### spkike norm + surrogate function
-best timesteps = 8, average runtinme = 55 seconds, best firing rate = 0.38 to maintain accuracy > 90% -->
+Some observations:
+- Without the surrogate gradient function, the accuracy is capped at 85%
+- Surprisingly, adding the surrogated can allow the accuracy to pass over 90% even if the timesteps = 1. Which is absurd to me. But maybe the probability input mostly distributed on two side(0 and 1) so it can still resemble the original input even T = 1.
+
+<img src="Timesteps_vanillapng.png" alt="Vanilla SNN Accuracy vs Timesteps" width="500">
+
+*Accuracy vs Timesteps for the SNN*
+
+<img src="Timesteps_spike_norm.png" alt="SNN with Spike Norm vs Timesteps" width="500">
+
+*Accuracy vs Timesteps for the SNN with spike norm applied.* 
+
+<img src="Timesteps_surrogate.png" alt="SNN with Surrogate Accuracy vs Timesteps" width="500">
+
+*Accuracy vs Timesteps for the SNN with surrogate gradient function applied.*
+
+<img src="Timesteps_norm_surrogate.png" alt="SNN with Spike Norm + Surrogate Accuracy vs Timesteps" width="500">
+
+*Accuracy vs Timesteps for the SNN with both spike norm and surrogate gradient applied.*
+
+### 1c Varying firing rate
+
+
+### 2 Hardware constraints
+
+The Hardware constraints are applied between training and test process:
+``` python
+train(train_dataloader, model, loss_func, optimizer)
+if add_constraint:
+    model.apply_weight_constraints()
+test(test_dataloader, model, loss_func)
+```
+I use a similar procedure in [Deep Compression]([2]) to optimize after applying the constraint weight. 
+Retrain and apply the constraints recursively until a fixed epoch or a desired accuracy is achieved.  
+#### Resistance ON-Off ratio
+
+#### Discrete states
+The function `quantize_weight` mimics the hardware's discrete state nature by setting the positive and negative weights to each have 16 states of weight.    
+
 
 
 
@@ -101,22 +134,6 @@ The `Surrogate_IF_neuron` replaces the firing method to the surrogate gradient f
 
 - The `reinitialize` method sets the membrane potential `self.v` back to the reset voltage `v_reset`, allowing the neuron to be reused for multiple samples.
 - The `spike_normalize` method sets the threshold voltage `self.v_threshold` to the value of `self.v_threshold_norm`, which is used for spike normalization.
-
-## Hardware constraints
-The Hardware constraints are applied between training and test process:
-``` python
-train(train_dataloader, model, loss_func, optimizer)
-if add_constraint:
-    model.apply_weight_constraints()
-test(test_dataloader, model, loss_func)
-```
-I use a similar procedure in [Deep Compression]([2]) to optimize after applying the constraint weight. 
-Retrain and apply the constraints recursively until a fixed epoch or a desired accuracy is achieved.  
-### Resistance ON-Off ratio
-
-### Discrete states
-The function `quantize_weight` mimics the hardware's discrete state nature by setting the positive and negative weights to each have 16 states of weight.    
-
 
 
 ## Acknowledgements
