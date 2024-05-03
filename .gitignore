@@ -1,6 +1,4 @@
-<<<<<<< Updated upstream
 
-=======
 # data
 wandb/
 out/
@@ -154,4 +152,4 @@ SuperNI/data/*
 !SuperNI/data/splits/task2categoies.json
 # Ignore everything else in SuperNI/data/splits/
 SuperNI/data/splits/*
->>>>>>> Stashed changes
+
