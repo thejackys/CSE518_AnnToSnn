@@ -1,4 +1,6 @@
 # EE 518 Neuromorphic Computing Spring 2024 Final Project
+Implementation Code can be found at:https://github.com/thejackys/CSE518_AnnToSnn
+
 neuromorphic software simulation project for converting Ann to SNN.
 
 This project implements a Spiking Neural Network (SNN) for digit classification on the MNIST dataset. It explores the conversion of an Artificial Neural Network (ANN) to an SNN, and analyzes the impact of various factors such as firing rates, timesteps, and hardware constraints on the performance and energy consumption of the SNN.
