@@ -10,7 +10,7 @@ Spike norm and surrogate gradient function are tested to see the difference in t
 Spike norm is Adapted from spike-norm proposed from <cite>[Going Deeper in Spiking Neural Networks: VGG and Residual Architectures][1]</cite>. The new threshold voltage for each Spiking neuron layer is set to $$v_{th} = \text{max}(v_{th}, w_0^\intercal s_0, (w_1^\intercal s_1), ..., (w_B^\intercal s_B)) $$ where $B$ is the batch size, $s_i$ is the input from the previous layer, and $w_i$ is the weight respective to $s_i$  after a whole timesteps T is has passed. In the original paper, It's effectively updated with batch size of 1.
 
 ## Surrogate gradient function
-Neuron firing of the IF-neuron follows the heaviside function $$ S[t] \Theta(v_{mem}[t] - v_{th}) $$
+Neuron firing of the IF-neuron follows the heaviside function $$S[t] \Theta(v_{mem}[t] - v_{th})$$
 The gradient would thus be unstable if follow the autograd directly. Thus (Surrogate Gradient Learning in Spiking Neural Networks)[https://arxiv.org/abs/1901.09948] is proposed to use surrogate function when doing backpropagation.  
 
 Although I am still not sure about the bioplausability of it, I tested the surrogate by applying the sigmoid surrogate gradient function from [spikingjelly](https://spikingjelly.readthedocs.io/zh-cn/latest/activation_based_en/surrogate.html)
