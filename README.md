@@ -5,7 +5,7 @@ neuromorphic software simulation project for converting Ann to SNN.
 
 This project implements a Spiking Neural Network (SNN) for digit classification on the MNIST dataset. It explores the conversion of an Artificial Neural Network (ANN) to an SNN, and analyzes the impact of various factors such as firing rates, timesteps, and hardware constraints on the performance and energy consumption of the SNN.
 
-Spike norm and surrogate gradient function are tested to see the difference in the IF_neuron. 
+**Spike norm and surrogate gradient function are tested (4 different configurations) to see whether there is any difference in the IF_neuron.** 
 ## Spike norm
 Spike norm is Adapted from spike-norm proposed from <cite>[Going Deeper in Spiking Neural Networks: VGG and Residual Architectures][1]</cite>. The new threshold voltage for each Spiking neuron layer is set to $$v_{th} = \text{max}(v_{th}, w_0^\intercal s_0, (w_1^\intercal s_1), ..., (w_B^\intercal s_B)) $$ where $B$ is the batch size, $s_i$ is the input from the previous layer, and $w_i$ is the weight respective to $s_i$  after a whole timesteps T is has passed. In the original paper, It's effectively updated with batch size of 1.
 
